@@ -1,28 +1,31 @@
-<h1 style="background-color:#222; color:#FFD700; padding:10px; border-radius:5px;">
-portwitr-interactive
-</h1>
+# portwitr-interactive
 
-🔌 portwitr  <br>
-│  <br>
-├─► 🌐 Ports  <br>
-├─► 🧠 Processes  <br>
-└─► 📂 Open Files
+**Interactive terminal-based port, process, file, and resource inspector for Linux**
 
+`portwitr-interactive` is a high-performance, **curses-based Terminal User Interface (TUI)** designed to give you **instant visibility and control** over your Linux system — all from a single, interactive view.
 
-**Interactive terminal-based port, process and file inspector for Linux.**
+It enables you to seamlessly navigate the full relationship between:
 
-`portwitr-interactive` is a **curses-based TUI** that lets you explore — in real time and interactively:
+> **Open ports → owning processes → CPU & memory usage → firewall rules → files in use**
 
-> **Which port is open → which process owns it → which files that process is using**
+This eliminates the need to jump between multiple tools such as `ss`, `netstat`, `lsof`, `top`, or firewall utilities.
 
-All from a single terminal screen.
+---
 
+![portwitr-interactive logo](logo.png)
 
-<p align="center">
-  <img src="logo.png" alt="portwitr-interactive logo" width="280"/>
-</p>
+---
 
+## Core Navigation
 
+```text
+portwitr
+├─ 🌐 Ports              View all open ports and their states
+├─ ⚡ Usage (CPU/Mem)    Real-time resource consumption per process
+├─ 🧠 Processes          Process inspection and ownership mapping
+├─ ⛔ Firewall Toggle    Enable/disable firewall rules interactively
+└─ 📂 Open Files         Files and sockets used by each process
+```
 ---
 
 ## 🧠 What Makes It Special?
@@ -30,7 +33,7 @@ All from a single terminal screen.
 Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),  
 **portwitr-interactive connects everything together**:
 
-🔌 **Port** → 🧠 **Process / Service** → 📂 **All open files**
+🔌 **Port** → ⚡ **CPU/MEM Usage** → 🧠 **Process / Service** → ⛔ **Firewall Control** → 📂 **All open files**
 
 ---
 
@@ -46,15 +49,19 @@ Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),
 
 ---
 
+
 ## ✨ Features
 
 - 🔍 **Live port listing** using `ss`
+- ⚡ Shows **CPU% / MEM% usage** per process
 - 🧠 Maps **PORT → PID → PROGRAM**
+- ⛔ **Firewall toggle** for selected port (temporarily block/unblock traffic)
 - 📂 Displays **all open files** of the selected process (`/proc/<pid>/fd`)
 - 🧾 Deep inspection via **`witr --port`**
 - 🖥️ Fully interactive **terminal UI (curses)**
 - ⚡ Real-time refresh
 - 🛑 Stop a **process or systemd service** directly from the UI (with confirmation)
+- 📝 **Warnings annotation** (e.g., suspicious working directory is flagged but explained)
 
 ---
 
@@ -63,21 +70,20 @@ Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),
 ### 🖥️ Main View
 
 | Key | Action |
-|----|-------|
+|-----|--------|
 | ↑ / ↓ | Move selection |
 | + / - | Resize table height |
 | → / ← | Scroll open files |
 | r | Refresh port list |
 | Tab | Switch to detail view |
 | s | Stop selected process / service |
+| f | Toggle firewall for selected port |
 | q | Quit |
 
----
-
-### 📜 Detail View
+### 📜 Detail View (witr output)
 
 | Key | Action |
-|----|-------|
+|-----|--------|
 | ↑ / ↓ | Scroll |
 | Tab | Back to main view |
 | q | Quit |
@@ -90,12 +96,15 @@ Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),
     - `ss -lntuHp`
 2. **Process resolution**
     - Extracts PID & program name from socket metadata
-3. **Open file inspection**
+3. **CPU/Mem usage**
+    - Uses `ps -p <pid> -o pcpu=,pmem=` for human-readable metrics
+4. **Open file inspection**
     - Reads `/proc/<pid>/fd`
-4. **Deep context**
-    - Calls `witr --port <port>`
-5. **Control**
+5. **Deep context**
+    - Calls `witr --port <port>` and annotates warnings
+6. **Control**
     - Optional process / service stop via `systemctl` or `kill`
+    - Temporary firewall block/unblock via F key
 
 ---
 
@@ -108,42 +117,31 @@ Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),
     - `systemctl`
     - `/proc` filesystem
     - `witr` (**mandatory**)
+    - `ps`
+    - `iptables` / `ufw` (for firewall toggle)
 - 🔐 `sudo` access required for:
     - `witr`
     - stopping processes/services
+    - firewall rule management
     - full `/proc` visibility
 
 ---
 
 ## 🚀 Installation
 
-> **bash
+```bash
 git clone https://github.com/sunels/portwitr-interactive.git
-cd portwitr-interactive**
-
-
----
-
-## Ensure `witr` exists:
-
-```bash
-which witr
-```
----
-
- # 🔌 Run:
-
-```bash
+cd portwitr-interactive
 python3 portwitr_interactive.py
 ```
-
----
 
 ## ⚠️ Safety Notes
 
 - 🛑 Destructive actions always require confirmation
 - 🧠 PID `1` (systemd) is protected
+- ⚡ Firewall toggle only affects traffic temporarily, does **not stop process**
 - 👀 Non-root usage limits visibility (expected behavior)
+- 📝 Warnings (like suspicious working directory) are annotated with explanation
 
 ---
 
@@ -151,7 +149,7 @@ python3 portwitr_interactive.py
 
 - ❌ No reinvention of system tools
 - ✅ Built on **native Linux introspection**
-- 🔍 Read-only by default
+- 🔍 Read-only by default (except explicit stop/firewall actions)
 - 🎯 Optimized for:
     - “Port already in use” debugging
     - Security inspection
@@ -161,16 +159,13 @@ python3 portwitr_interactive.py
 ---
 
 ## 📁 Project Structure
-
-```
+```bash
 portwitr-interactive/
 ├── portwitr_interactive.py
 ├── README.md
 ├── pp-1.png
 └── pp-2.png
 ```
-
----
 
 ## 🛣️ Roadmap (Ideas)
 
@@ -196,5 +191,3 @@ MIT License
 
 > 🔌 **portwitr-interactive**  
 > *See the whole picture — not just the port.*
-
-
