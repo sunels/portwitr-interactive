@@ -349,6 +349,7 @@ def main(stdscr):
                 if cached_port != port:
                     cached_port = port
                     lines = get_witr_output(port)
+                    lines = annotate_warnings(lines)   # <-- Eklenen satır
                     wrapped = []
                     for l in lines:
                         wrapped += textwrap.wrap(l, width=w - 4) or [""]
@@ -424,6 +425,23 @@ def main(stdscr):
             if selected < 0 and rows:
                 selected = 0
             offset = min(max(selected - visible_rows // 2, 0), max(0, len(rows) - visible_rows))
+# --------------------------------------------------
+# Warnings Parsing / Annotation
+# --------------------------------------------------
+def annotate_warnings(lines):
+    """
+    Lines: list of strings from witr output
+    Returns: annotated list preserving original lines
+    """
+    annotated = []
+    for line in lines:
+        annotated.append(line)
+        if "Process is running from a suspicious working directory" in line:
+            # Ek yorum ekle
+            annotated.append("  ✔ Technical: Correct")
+            annotated.append("  ⚠ Practical: normal for systemd services")
+            annotated.append("  👉 Likely false positive")
+    return annotated
 
 if __name__ == "__main__":
     check_python_version()
