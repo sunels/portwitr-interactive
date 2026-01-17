@@ -50,7 +50,8 @@ def parse_ss():
         parts = line.split()
         if len(parts) < 5:
             continue
-        proto = parts[0]
+        proto = parts[0].lower()
+        icon = "🔗" if proto == "tcp" else "📡"
         local = parts[4]
         port = local.split(":")[-1]
         pid = "-"
@@ -64,9 +65,9 @@ def parse_ss():
         key = (port, proto)
         if key in seen:
             continue
-        seen[key] = (port, proto, f"{pid}/{prog}", prog, pid)
+        seen[key] = (port, f"{icon} {proto.upper()}", f"{pid}/{prog}", prog, pid)
     rows = list(seen.values())
-    rows.sort(key=lambda r: (0 if r[1].lower() == "tcp" else 1, int(r[0]) if r[0].isdigit() else 0))
+    rows.sort(key=lambda r: (0 if "tcp" in r[1].lower() else 1, int(r[0]) if r[0].isdigit() else 0))
     return rows
 
 def get_witr_output(port):
@@ -117,19 +118,30 @@ def get_open_files(pid):
         files.append(("-", "Permission denied (run as root to view)"))
     return files
 
+def format_mem_kb(kb):
+    try:
+        kb = float(kb)
+    except:
+        return "-"
+    mb = kb / 1024
+    if mb > 1024:
+        return f"{mb/1024:.1f}G"
+    return f"{mb:.0f}M"
+
 def get_process_usage(pid):
-    """Return CPU%/MEM% as string"""
+    """Return CPU%/MEM formatted as MB or GB"""
     if not pid or not pid.isdigit():
         return "-"
     try:
         result = subprocess.run(
-            ["ps", "-p", pid, "-o", "pcpu=,pmem="],
+            ["ps", "-p", pid, "-o", "pcpu=,rss="],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True
         )
-        cpu, mem = result.stdout.strip().split()
-        return f"{cpu}%/{mem}%"
+        cpu, mem_kb = result.stdout.strip().split()
+        mem = format_mem_kb(mem_kb)
+        return f"{mem}/{cpu}%"
     except Exception:
         return "-"
 
@@ -190,7 +202,6 @@ def annotate_warnings(lines):
 # --------------------------------------------------
 def toggle_firewall(port, stdscr, firewall_status):
     pid = None
-    # Get PID from ss
     try:
         result = subprocess.run(
             ["ss", "-lntuHp"],
@@ -207,18 +218,14 @@ def toggle_firewall(port, stdscr, firewall_status):
     except Exception:
         pass
     if not pid:
-        msg = f"No process found on port {port}."
-        show_message(stdscr, msg)
+        show_message(stdscr, f"No process found on port {port}.")
         return
-    # Check current status
-    status = firewall_status.get(port, True)  # True = trafik açık
+    status = firewall_status.get(port, True)
     if status:
-        # Drop port
         subprocess.run(["sudo", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"])
         firewall_status[port] = False
         msg = f"Port {port} traffic DROPPED."
     else:
-        # Remove DROP rule (simple implementation, assumes single DROP rule per port)
         subprocess.run(["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"])
         firewall_status[port] = True
         msg = f"Port {port} traffic ALLOWED."
@@ -238,16 +245,24 @@ def show_message(stdscr, msg, duration=1.5):
 # --------------------------------------------------
 # UI Draw
 # --------------------------------------------------
+# --------------------------------------------------
+# UI Draw (Güncellenmiş)
+# --------------------------------------------------
+# --------------------------------------------------
+# UI Draw (Düzeltilmiş)
+# --------------------------------------------------
 def draw_table(win, rows, selected, offset, cache, firewall_status):
     win.erase()
     h, w = win.getmaxyx()
-    headers = ["PORT", "PROTO", "USAGE", "PROCESS", "USER"]
-    widths = [8, 8, 12, 32, w - 60]
+    # Header
+    headers = ["🌐 PORT", "PROTO", "📊 USAGE [Mem/CPU]", "🧠 PROCESS", "👤 USER"]
+    widths = [10, 8, 18, 28, w - 68]  # PORT-PROTO arası boşluk artırıldı, PROCESS-USER arası azaltıldı
     x = 1
     for htxt, wd in zip(headers, widths):
         win.addstr(1, x, htxt.ljust(wd), curses.A_BOLD)
         x += wd
     win.hline(2, 1, curses.ACS_HLINE, w - 2)
+
     for i in range(h - 4):
         idx = offset + i
         if idx >= len(rows):
@@ -256,8 +271,11 @@ def draw_table(win, rows, selected, offset, cache, firewall_status):
         port, proto, pidprog, prog, pid = rows[idx]
         usage = get_process_usage(pid)
         user = cache.get(port, {}).get("user", "-")
-        fw = "⚡" if firewall_status.get(port, True) else "⛔"
-        data = [f"{fw} {port}", proto, usage, prog, user]
+        # Process ikon seçimi: root vs normal
+        proc_icon = "👑" if user=="root" else "🧑"
+        # TCP/UDP ikon sadece PROTO header altında
+        fw_icon = "⚡" if firewall_status.get(port, True) else "⛔"
+        data = [f"{fw_icon} {port}", proto.upper(), usage, f"{proc_icon} {prog}", f"👤 {user}"]
         x = 1
         for val, wd in zip(data, widths):
             win.addstr(i+3, x, val[:wd].ljust(wd), attr)
@@ -265,10 +283,49 @@ def draw_table(win, rows, selected, offset, cache, firewall_status):
     win.box()
     win.noutrefresh()
 
+def draw_detail(win, lines, scroll=0):
+    win.erase()
+    h, w = win.getmaxyx()
+    header = f"📝 Detail View — {len(lines)} lines"
+    win.addstr(1, 2, header, curses.A_BOLD)
+    win.hline(2, 1, curses.ACS_HLINE, w - 2)
+    max_rows = h - 4
+
+    # ikon eşlemesi
+    icons = {
+        "Target": "🎯",
+        "Container": "🐳",
+        "Command": "🧠",
+        "Started": "⏱ ",
+        "Why it Exists": "🧠",
+        "Source": "📦",
+        "Working Dir": "🗂 ",
+        "Listening": "👂",
+        "Socket": "🔌",
+        "Warnings": "⚠️ ",
+        "PID": "🆔",
+        "User": "👤",
+        "Process": "🧠"
+    }
+
+    for i in range(max_rows):
+        idx = scroll + i
+        if idx >= len(lines):
+            continue
+        line = lines[idx]
+        # Her satır türüne ikon ekle
+        for key, icon in icons.items():
+            if key in line:
+                line = line.replace(key, f"{icon} {key}")
+        win.addstr(i+3, 2, line[:w-4])
+    win.box()
+    win.noutrefresh()
+
+
 def draw_open_files(win, pid, prog, files, scroll=0):
     win.erase()
     h, w = win.getmaxyx()
-    header = f"PID/PROGRAM: {pid}/{prog}   Number Of Open Files: {len(files)}"
+    header = f"📂 Open Files — PID {pid}/{prog} ({len(files)})"
     win.addstr(1, 2, header, curses.A_BOLD)
     win.hline(2, 1, curses.ACS_HLINE, w - 2)
     max_rows = h - 4
@@ -277,86 +334,26 @@ def draw_open_files(win, pid, prog, files, scroll=0):
         if idx >= len(files):
             continue
         fd, path = files[idx]
-        line = f"{idx+1:3d}. [{fd}] {path}"
-        win.addstr(i+3, 2, line)
+        win.addstr(i+3, 2, f"{idx+1:3d}. [{fd}] {path}")
     win.box()
     win.noutrefresh()
-
-def draw_detail(win, lines, scroll=0):
-    win.erase()
-    win.box()
-    h, w = win.getmaxyx()
-    for i, line in enumerate(lines[scroll:scroll+h-2]):
-        win.addstr(i+1, 2, line)
-    win.noutrefresh()
-    return len(lines)
 
 def draw_help_bar(stdscr, show_detail):
     h, w = stdscr.getmaxyx()
     if show_detail:
-        help_text = " [↑/↓] Scroll   [Tab] Maximize/Restore Witr Pane   [q] Quit "
+        help_text = " 🧭 ↑/↓ Scroll   [Tab] Maximize/Restore Witr Pane   ❌ Quit "
     else:
-        help_text = " [↑/↓] Select   [+/-] Resize   [r] Refresh   [Tab] Maximize/Restore Witr Pane   [→/←] Open Files Scroll   [s] Stop Proc/Service   [f] Toggle Firewall   [q] Quit "
+        help_text = (" 🧭 ↑/↓ Select   ↕️ +/- Resize   🔄 r Refresh   "
+                     "📂 ←/→ Open Files Scroll   ⛔ s Stop Proc/Service   🔥 f Toggle Firewall   ❌ q Quit ")
     bar_win = curses.newwin(3, w, h-3, 0)
     bar_win.erase()
     bar_win.box()
     x = max(1, (w - len(help_text)) // 2)
     try:
         bar_win.addstr(1, x, help_text, curses.A_BOLD)
-    except Exception:
+    except:
         bar_win.addstr(1, x, help_text)
     bar_win.noutrefresh()
-
-# --------------------------------------------------
-# Confirm Dialog / Stop Process
-# --------------------------------------------------
-def confirm_dialog(stdscr, message):
-    h, w = stdscr.getmaxyx()
-    win_h, win_w = 5, min(60, w-4)
-    win = curses.newwin(win_h, win_w, (h-win_h)//2, (w-win_w)//2)
-    win.box()
-    win.addstr(1, 2, message)
-    win.addstr(3, 2, "[y] Yes   [n] No")
-    win.refresh()
-    while True:
-        k = win.getch()
-        if k in (ord('y'), ord('Y')):
-            return True
-        elif k in (ord('n'), ord('N'), 27):
-            return False
-
-def stop_process_or_service(pid, prog, stdscr):
-    service_name = None
-    try:
-        result = subprocess.run(
-            ["systemctl", "status", prog],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        if "Loaded: loaded" in result.stdout:
-            service_name = prog
-    except Exception:
-        pass
-    msg = ""
-    if service_name:
-        try:
-            subprocess.run(["sudo", "systemctl", "stop", service_name], check=True)
-            msg = f"Service {service_name} stopped."
-        except Exception as e:
-            msg = f"Failed to stop service: {e}"
-    elif pid and pid.isdigit() and int(pid) > 1:
-        try:
-            subprocess.run(["sudo", "kill", "-15", pid])
-            time.sleep(1)
-            if os.path.exists(f"/proc/{pid}"):
-                subprocess.run(["sudo", "kill", "-9", pid])
-            msg = f"PID {pid} stopped."
-        except Exception as e:
-            msg = f"Failed to stop process: {e}"
-    else:
-        msg = "Invalid PID/service."
-    show_message(stdscr, msg)
 
 # --------------------------------------------------
 # Main Loop
@@ -367,7 +364,7 @@ def main(stdscr):
 
     rows = parse_ss()
     cache = {}
-    firewall_status = {}  # True=trafik açık, False=durdu
+    firewall_status = {}
     splash_screen(stdscr, rows, cache)
 
     selected = 0 if rows else -1
@@ -424,12 +421,8 @@ def main(stdscr):
         curses.doupdate()
         k = stdscr.getch()
 
-        # -----------------
-        # Key handling
-        # -----------------
         if k == ord('q'):
             break
-
         if show_detail:
             if k == curses.KEY_UP and detail_scroll>0:
                 detail_scroll -= 1
@@ -475,7 +468,6 @@ def main(stdscr):
                 port = rows[selected][0]
                 toggle_firewall(port, stdscr, firewall_status)
 
-            # Scroll offset for port list
             if selected >= len(rows):
                 selected = len(rows) - 1
             if selected < 0 and rows:
