@@ -4,6 +4,21 @@
 
 `portwitr-interactive` is a high-performance, **curses-based Terminal User Interface (TUI)** designed to give you **instant visibility and control** over your Linux system — all from a single, interactive view.
 
+## ✨ Features
+
+- 🔍 **Live port listing** using `ss`
+- ⚡ Shows **CPU% / MEM% usage** per process
+- 🧠 Maps **PORT → PID → PROGRAM**
+- ⛔ **Firewall toggle** for selected port (temporarily block/unblock traffic)
+- 📂 Displays **all open files** of the selected process (`/proc/<pid>/fd`)
+- 🧾 Deep inspection via **`witr --port`**
+- 🖥️ Fully interactive **terminal UI (curses)**
+- ⚡ Real-time refresh
+- 🛑 Stop a **process or systemd service** directly from the UI (with confirmation)
+- 📝 **Warnings annotation** (e.g., suspicious working directory is flagged but explained)
+
+---
+
 It enables you to seamlessly navigate the full relationship between:
 
 > **Open ports → owning processes → CPU & memory usage → firewall rules → files in use**
@@ -49,21 +64,6 @@ Unlike classic tools that show *only one layer* (`ss`, `netstat`, `lsof`),
 
 ---
 
-
-## ✨ Features
-
-- 🔍 **Live port listing** using `ss`
-- ⚡ Shows **CPU% / MEM% usage** per process
-- 🧠 Maps **PORT → PID → PROGRAM**
-- ⛔ **Firewall toggle** for selected port (temporarily block/unblock traffic)
-- 📂 Displays **all open files** of the selected process (`/proc/<pid>/fd`)
-- 🧾 Deep inspection via **`witr --port`**
-- 🖥️ Fully interactive **terminal UI (curses)**
-- ⚡ Real-time refresh
-- 🛑 Stop a **process or systemd service** directly from the UI (with confirmation)
-- 📝 **Warnings annotation** (e.g., suspicious working directory is flagged but explained)
-
----
 
 ## 🎮 Key Bindings
 
