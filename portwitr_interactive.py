@@ -46,24 +46,41 @@ def parse_ss():
         stderr=subprocess.DEVNULL,
         text=True
     )
-    rows = []
+
+    seen = {}  # (port, proto) -> row
+
     for line in result.stdout.splitlines():
         parts = line.split()
         if len(parts) < 5:
             continue
+
         proto = parts[0]
         local = parts[4]
         port = local.split(":")[-1]
+
         pid = "-"
         prog = "-"
+
         m = re.search(r'pid=(\d+)', line)
         if m:
             pid = m.group(1)
+
         m = re.search(r'\("([^"]+)"', line)
         if m:
             prog = m.group(1)
-        rows.append((port, proto, f"{pid}/{prog}", prog, pid))
-    rows.sort(key=lambda r: (0 if r[1].lower() == "tcp" else 1, r[0]))
+
+        key = (port, proto)
+
+        # Aynı port+proto daha önce eklendiyse geç
+        if key in seen:
+            continue
+
+        seen[key] = (port, proto, f"{pid}/{prog}", prog, pid)
+
+    rows = list(seen.values())
+
+    # TCP üstte, sonra UDP, port numarasına göre sırala
+    rows.sort(key=lambda r: (0 if r[1].lower() == "tcp" else 1, int(r[0]) if r[0].isdigit() else 0))
     return rows
 
 def get_witr_output(port):
