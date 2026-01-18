@@ -491,6 +491,7 @@ def draw_detail(win, lines, scroll=0, conn_info=None):
             safe_add(row_y, conn_panel_x, f"{ip} : {cnt}")
             row_y += 1
 
+        row_y += 1
         # 🔥 PROCESS REALITY CHECK
         if row_y < h - 1:
             safe_add(row_y, conn_panel_x, "🔥 Process Reality Check (DEBUG)", curses.A_BOLD | curses.A_UNDERLINE)
@@ -527,6 +528,20 @@ def draw_detail(win, lines, scroll=0, conn_info=None):
                 row_y += 1
             if row_y < h - 1:
                 safe_add(row_y, conn_panel_x, f"  Risk  : {fd_info['risk']}")
+                row_y += 1
+            row_y += 1
+            # 🔹 RUNTIME CLASSIFICATION (SMART)
+            if pid and pid.isdigit() and row_y < h - 1:
+                runtime = detect_runtime_type(pid)
+                safe_add(row_y, conn_panel_x, "6️⃣ RUNTIME CLASSIFICATION (SMART)", curses.A_BOLD | curses.A_UNDERLINE)
+                row_y += 1
+                safe_add(row_y, conn_panel_x, f"🧩 Runtime :")
+                row_y += 1
+                safe_add(row_y, conn_panel_x, f"  Type : {runtime['type']}")
+                row_y += 1
+                safe_add(row_y, conn_panel_x, f"  Mode : {runtime['mode']}")
+                row_y += 1
+                safe_add(row_y, conn_panel_x, f"  GC   : {runtime['gc']}")
                 row_y += 1
         else:
             safe_add(row_y, conn_panel_x, "<no pid>")
@@ -787,6 +802,66 @@ def get_fd_pressure(pid):
         "risk": risk
     })
     return fd_info
+
+def detect_runtime_type(pid):
+    """
+    Detect runtime environment from PID.
+    Returns dict:
+    {
+        "type": "-",
+        "mode": "-",
+        "gc": "-"
+    }
+    """
+    runtime = {"type": "-", "mode": "-", "gc": "-"}
+    if not pid or not pid.isdigit():
+        return runtime
+    try:
+        # cmdline
+        with open(f"/proc/{pid}/cmdline", "r") as f:
+            cmdline = f.read().replace("\0", " ").lower()
+
+        # environ
+        env = {}
+        try:
+            with open(f"/proc/{pid}/environ", "r") as f:
+                for e in f.read().split("\0"):
+                    if "=" in e:
+                        k,v = e.split("=",1)
+                        env[k] = v
+        except Exception:
+            pass
+
+        # Java detection
+        if "java" in cmdline:
+            runtime["type"] = "Java"
+            if "spring-boot" in cmdline or "springboot" in cmdline:
+                runtime["mode"] = "Spring Boot Server"
+            else:
+                runtime["mode"] = "Server" if "-jar" in cmdline else "App"
+            # detect GC type from JAVA_OPTS or cmdline
+            gc_match = re.search(r"-XX:\+Use([A-Za-z0-9]+)GC", cmdline)
+            if not gc_match:
+                gc_match = re.search(r"GC=([A-Za-z0-9]+)", " ".join(env.get("JAVA_OPTS","").split()))
+            runtime["gc"] = gc_match.group(1) if gc_match else "Unknown"
+        elif "node" in cmdline or "nodejs" in cmdline:
+            runtime["type"] = "Node"
+            runtime["mode"] = "Server"
+        elif "python" in cmdline:
+            runtime["type"] = "Python"
+            runtime["mode"] = "Script"
+        elif "nginx" in cmdline:
+            runtime["type"] = "Nginx"
+            runtime["mode"] = "Server"
+        elif "postgres" in cmdline or "postmaster" in cmdline:
+            runtime["type"] = "Postgres"
+            runtime["mode"] = "DB Server"
+        elif "go" in cmdline:
+            runtime["type"] = "Go"
+            runtime["mode"] = "Server"
+    except Exception:
+        pass
+    return runtime
 
 if __name__ == "__main__":
     check_python_version()
