@@ -17,6 +17,7 @@
 - 🛑 Stop a **process or systemd service** directly from the UI (with confirmation)
 - 📝 Warnings annotation (e.g., suspicious working directory is flagged but explained)
 - 🛠️ **Action Center (Modal)** — quick operational panel for ports & processes (see below)
+- 💥 **Kill Connections** operation implemented (Action Center → Kill Connections): list and kill established connections for a port (sudo may be required)
 - 🚫 **Block IP** operation (Action Center → Block IP): block a source IP for a port via iptables (sudo required)
 - 🧩 Modal UX: monospace, standard curses box(), 2-space padding, reverse+bold highlights, single‑key selection, ESC to close each modal
 
@@ -162,7 +163,7 @@ UI / behavior highlights
 Action Center layout (icons mirror the UI)
 - Left column — 🌐 PORT OPERATIONS
   - 🚫  [b] Block IP
-  - 💥  [k] Kill Connections (planned)
+  - 💥  [k] Kill Connections — lists active ESTABLISHED connections (select 1..9 to kill)
   - 🚦  [l] Connection Limit (planned)
 - Right column — 🧠 PROCESS OPERATIONS
   - ⚡  [h] Reload (SIGHUP)
@@ -254,3 +255,9 @@ MIT License
 
 > 🔌 **portwitr-interactive**  
 > *See the whole picture — not just the port.*
+
+## 🛠 Performance / Startup caching
+- The TUI now eagerly preloads heavy data (witr output, connection lists, open-files and per-PID usage) for all discovered ports during the splash/startup phase. This means:
+  - First launch may take a little longer (splash progress shows updates), but subsequent scrolling is instant because data is read from in-memory caches.
+  - The UI operates on a read-only "snapshot" taken at startup — no heavy system commands are executed while you scroll. If you need fresh data, press `r` to refresh (re-takes the snapshot).
+- You can tune caching TTL constants in the source (USAGE_TTL, FILES_TTL, PARSE_TTL, WITR_TTL, CONN_TTL) to balance freshness vs. UI responsiveness.
